@@ -31,6 +31,17 @@ def palabra(w):
     pend = False      # acabamos de poner una consonante sin vocal
     ini_cons = None   # índice en out donde empezó esa consonante
     inicio = True     # estamos al principio de una sílaba nueva
+
+    def cierra():
+        """Consonante que se queda sin vocal detrás: lleva হসন্ত. Pasa al final
+        de palabra y delante de un guion que sí se imprime, y el libro lo marca
+        igual en la fuente heredada: 'jagat' es ij_ y no ij, 'asat-saṅga' es
+        as_sĔ. Sin el hasanta la vuelta atrás leía la vocal inherente y salía
+        'jagata', 'asata-saṅga'."""
+        nonlocal pend, ini_cons
+        if pend:
+            out.append(VIR); pend = False; ini_cons = None
+
     while i < len(w):
         c = w[i]
 
@@ -49,11 +60,11 @@ def palabra(w):
             if resto.startswith(VOW_INI):
                 pass          # corte silábico del traductor: no se imprime ni altera la sílaba
             else:
-                out.append('-'); pend = False; inicio = True
+                cierra(); out.append('-'); inicio = True
             i += 1; continue
 
         if c in "'’":
-            out.append('’'); pend = False; inicio = True; i += 1; continue
+            cierra(); out.append('’'); inicio = True; i += 1; continue
 
         # consonante
         hit = next((p for p in CONS if w.startswith(p[0], i)), None)
@@ -80,7 +91,8 @@ def palabra(w):
             out.append(matra if pend else indep)
             pend = False; inicio = False; ini_cons = None; i += len(iast); continue
 
-        out.append(c); pend = False; inicio = True; i += 1
+        cierra(); out.append(c); inicio = True; i += 1
+    cierra()
     return ''.join(out)
 
 def iast_a_bengali(texto):

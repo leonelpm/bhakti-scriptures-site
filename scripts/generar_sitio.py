@@ -5,28 +5,37 @@ Las secciones que todavia no se han extraido salen en el indice marcadas como
 pendientes, no desaparecen."""
 import json, os, html, sys
 from secciones import SECCIONES, INDICE_KIRTAN, archivo, vecinas
-from generar_html import CSS, construir, comprobar
+from generar_html import CSS, CABEZA, construir, comprobar
 
 DEST = os.environ.get('DEST', 'sitio')
+PORTADA = 'index.html'          # GitHub Pages sirve esta como raiz
+
+# Interruptor unico de la capa de auditoria: los recortes del bengali impreso.
+# Se queda encendida mientras revisamos el libro capitulo por capitulo; cuando
+# se acabe la revision basta ponerla en False (o CAPA_ORIGINAL=0 en el entorno)
+# y regenerar para que desaparezca de todo el sitio y las paginas adelgacen.
+CAPA_ORIGINAL = os.environ.get('CAPA_ORIGINAL', '1') != '0'
+
 esc = lambda s: html.escape(s, quote=False)
+escribir = lambda ruta, txt: open(ruta, 'w', encoding='utf-8', newline='\n').write(txt)
 
 
 def cargar(sec):
     ruta = os.path.join(DEST, 'json', sec['slug'] + '.json')
-    return json.load(open(ruta)) if os.path.exists(ruta) else None
+    return json.load(open(ruta, encoding='utf-8')) if os.path.exists(ruta) else None
 
 
 def pagina_seccion(sec, D):
     ant, sig = vecinas(sec)
-    nav = {'indice': 'indice.html'}
+    nav = {'indice': PORTADA}
     if ant and cargar(ant):
         nav['ant'] = (archivo(ant), esc(ant['rom']))
     if sig and cargar(sig):
         nav['sig'] = (archivo(sig), esc(sig['rom']))
-    doc = construir(D, con_buscador=False, con_original=True, css='estilo.css', nav=nav)
+    doc = construir(D, con_buscador=False, con_original=CAPA_ORIGINAL, css='estilo.css', nav=nav)
     print(' ', archivo(sec))
     ok = comprobar(doc, D)
-    open(os.path.join(DEST, archivo(sec)), 'w').write(doc)
+    escribir(os.path.join(DEST, archivo(sec)), doc)
     return ok
 
 
@@ -48,7 +57,7 @@ def ancla_kirtan(fila, hechas):
 
 def indice(hechas):
     kir = os.path.join(DEST, 'json', 'kirtan.json')
-    filas = json.load(open(kir)) if os.path.exists(kir) else []
+    filas = json.load(open(kir, encoding='utf-8')) if os.path.exists(kir) else []
     hechos = {s['slug'] for s, _ in hechas}
 
     secs = []
@@ -56,7 +65,7 @@ def indice(hechas):
         n = f'<span class="num">{s["orden"]:02d}</span>'
         etiqueta = '' if s['canciones'] else '<span class="aviso">otro formato</span>'
         if s['slug'] in hechos:
-            D = dict(hechas)[s['slug']] if False else cargar(s)
+            D = cargar(s)
             cuenta = sum(len(c['versos']) for c in D['canciones'])
             secs.append(f'<li><a href="{archivo(s)}">{n}<b>{esc(s["rom"])}</b>'
                         f'<em>{esc(s["es"])}</em>'
@@ -79,8 +88,7 @@ def indice(hechas):
     doc = f'''<!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+{CABEZA}
 <title>&#346;ara&#7751;&#257;gati</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -105,9 +113,9 @@ def indice(hechas):
 </body>
 </html>
 '''
-    open(os.path.join(DEST, 'indice.html'), 'w').write(doc)
+    escribir(os.path.join(DEST, PORTADA), doc)
     enlazadas = sum(1 for k in ks if 'pend' not in k)
-    print(f'  indice.html | {len(hechos)} de {len(SECCIONES)} secciones | '
+    print(f'  {PORTADA} | {len(hechos)} de {len(SECCIONES)} secciones | '
           f'{enlazadas} de {len(filas)} kīrtans enlazados')
 
 
@@ -144,7 +152,7 @@ body.portada main{max-width:44rem;padding-bottom:5rem}
 
 def main():
     os.makedirs(DEST, exist_ok=True)
-    open(os.path.join(DEST, 'estilo.css'), 'w').write(CSS + EXTRA)
+    escribir(os.path.join(DEST, 'estilo.css'), CSS + EXTRA)
     pedidas = sys.argv[1:]
     hechas, todo_ok = [], True
     for s in SECCIONES:
@@ -160,6 +168,7 @@ def main():
         todo_ok &= pagina_seccion(s, D)
     indice(hechas)
     print('  estilo.css', round(os.path.getsize(os.path.join(DEST, 'estilo.css')) / 1024, 1), 'KB')
+    print('  capa de recortes del bengali impreso:', 'ENCENDIDA' if CAPA_ORIGINAL else 'apagada')
     print('SITIO', 'listo' if todo_ok else 'CON FALLOS')
 
 

@@ -1,17 +1,27 @@
-import pdfplumber, re, json, os, subprocess
-PDF = os.environ.get('SARANAGATI_PDF', '/mnt/user-data/uploads/SARANAGATI.pdf')
+import pdfplumber, re, json, os, shutil, subprocess, unicodedata
+PDF = os.environ.get('SARANAGATI_PDF', 'SARANAGATI.pdf')
 pdf = pdfplumber.open(PDF)
 DIG={'!':'1','@':'2','#':'3','$':'4','%':'5','^':'6','&':'7','*':'8','(':'9',')':'0'}
 PAGES = 'pages300'
+DPI = 300
 
 def rasterizar(p0, p1):
-    """Deja en pages300/ las paginas del rango a 300 DPI, solo las que falten."""
+    """Deja en pages300/ las paginas del rango a 300 DPI, solo las que falten.
+    Con pdftoppm si esta en la maquina; si no, con pypdfium2, que llega por pip
+    y evita tener que instalar poppler. Las dos dan la misma rejilla de pixeles
+    (pagina en puntos x 300/72), que es lo que crop_mask da por supuesto."""
     os.makedirs(PAGES, exist_ok=True)
     faltan = [n for n in range(p0, p1 + 1) if not os.path.exists(f'{PAGES}/p-{n:03d}.png')]
     if not faltan: return
-    a, b = min(faltan), max(faltan)
-    subprocess.run(['pdftoppm', '-r', '300', '-png', '-f', str(a), '-l', str(b),
-                    PDF, f'{PAGES}/p'], check=True)
+    if shutil.which('pdftoppm'):
+        a, b = min(faltan), max(faltan)
+        subprocess.run(['pdftoppm', '-r', str(DPI), '-png', '-f', str(a), '-l', str(b),
+                        PDF, f'{PAGES}/p'], check=True)
+        return
+    import pypdfium2
+    doc = pypdfium2.PdfDocument(PDF)
+    for n in faltan:
+        doc[n - 1].render(scale=DPI / 72).to_pil().save(f'{PAGES}/p-{n:03d}.png')
 
 MK_T=r'\[(\d+)(?:\s*[\u2013\u2014-]\s*(\d+))?\]'   # [3] o [3-4] del glosario
 MK_P=r'\((\d+)(?:\s*[\u2013\u2014-]\s*(\d+))?\)'   # (3) o (3-4) de traduccion y comentario
@@ -20,6 +30,23 @@ def rango(m):
     a=int(m.group(1)); b=int(m.group(2)) if m.group(2) else a
     return list(range(a, b+1))
 
+def recoloca(chs):
+    """El chandrabindu combinante sale del PDF con anchura cero y la misma x que
+    el glifo que viene detras. Al ordenar la linea por x cae al otro lado del
+    espacio o de la raya y se pega a la palabra siguiente: 'duhu–̐ambos' por
+    'duhu̐–ambos', 'pekhahu ̐(dekhitechhi)' por 'pekhahu̐ (dekhitechhi)'. La marca
+    va siempre sobre la letra que la precede, asi que se recoloca por posicion,
+    detras de la letra cuyo borde derecho cae mas cerca de la marca."""
+    marcas=[c for c in chs if len(c['text'])==1 and unicodedata.combining(c['text'])]
+    if not marcas: return chs
+    resto=[c for c in chs if not (len(c['text'])==1 and unicodedata.combining(c['text']))]
+    for m in marcas:
+        letras=[j for j,b in enumerate(resto) if b['text'].isalpha()]
+        if not letras: resto.append(m); continue
+        j=min(letras, key=lambda j:(abs(resto[j]['x1']-m['x0']), j))
+        resto.insert(j+1, m)
+    return resto
+
 def get_lines(p,tol=3.0):
     out=[]
     for ch in sorted(p.chars,key=lambda c:(c['top'],c['x0'])):
@@ -27,10 +54,10 @@ def get_lines(p,tol=3.0):
         else: out.append({'top':ch['top'],'chars':[ch]})
     res=[]
     for l in out:
-        chs=sorted(l['chars'],key=lambda c:c['x0'])
+        chs=recoloca(sorted(l['chars'],key=lambda c:c['x0']))
         first=[c for c in chs if c['text'].strip()]
         res.append({'page':p.page_number,'top':min(c['top'] for c in chs),'bottom':max(c['bottom'] for c in chs),
-          'x0':min(c['x0'] for c in chs),'x1':max(c['x1'] for c in chs),
+          'x0':min(c['x0'] for c in chs),'x1':max(c['x1'] for c in chs),'ancho':float(p.width),
           'text':''.join(c['text'] for c in chs),'chars':chs,
           'fonts':[c['fontname'].split('+')[-1] for c in chs],'size':round(max(c['size'] for c in chs),1)})
     return res
@@ -50,7 +77,13 @@ def kind(l):
     ben=any('Bengkeys' in f for f in l['fonts']); s=l['size']; t=l['text'].strip()
     bf=sum('Bold' in f for f in l['fonts'])/max(len(l['fonts']),1)
     if ben and s>=13: return 'section_ben'
-    if ben: return 'song_num_ben' if (l['x1']-l['x0'])<45 else 'bengali'
+    if ben:
+        # El adorno con el numero de cancion es corto Y va centrado en la caja.
+        # Con la anchura sola, el estribillo de Bhajana-lalasa ('hari he!',
+        # 'jaya he!', 'prabhu he!'), que es corto pero arranca en el margen
+        # izquierdo como los demas versos, se tomaba por numero y se perdia.
+        centrado = abs((l['x0']+l['x1'])/2 - l['ancho']/2) < 12
+        return 'song_num_ben' if (l['x1']-l['x0'])<45 and centrado else 'bengali'
     if s>=13: return 'section_rom'
     if s==8.0: return 'nota_pie'
     if re.fullmatch(r'\(\d+\)',t) and s>=10.2: return 'song_num'
@@ -70,9 +103,12 @@ def extraer(sec, modo='archivo', dest='.'):
     for pno in range(P0,P1+1):
         for l in get_lines(pdf.pages[pno-1]):
             if l['top']<45: continue
+            # un glifo de espacio suelto forma su propia linea y se colaba como
+            # transliteracion: metia una linea en blanco en el verso
+            if not l['text'].strip(): continue
             l['kind']=kind(l); stream.append(l)
 
-    open_w=False; esperando=False
+    open_w=False; esperando=False; cuerpo_w=None
     cierra=lambda t: bool(re.search(MK_T+r'\s*$', t.rstrip()))
     for l in stream:
         k=l['kind']; t=l['text']
@@ -81,9 +117,16 @@ def extraer(sec, modo='archivo', dest='.'):
         if k not in ('small','prosa'):
             open_w=False; esperando=False; continue
         if open_w:
-            l['kind']='wbw'; open_w=not cierra(t); continue
+            # Un glosario sigue abierto mientras el cuerpo no cambie: los hay a
+            # 9 puntos, que caen en 'small', y los hay impresos a 9.7, que caen
+            # en 'prosa' y se confunden con el comentario. Antes seguia tragando
+            # cualquier prosa, y cuando un glosario se partia por un salto de
+            # pagina se comia entera la traduccion que venia en medio.
+            if k=='small' or l['size']==cuerpo_w:
+                l['kind']='wbw'; open_w=not cierra(t); continue
+            open_w=False
         if t.count('–')>=2 and (k=='small' or esperando):
-            l['kind']='wbw'; open_w=not cierra(t); esperando=False
+            l['kind']='wbw'; open_w=not cierra(t); esperando=False; cuerpo_w=l['size']
         else:
             l['kind']='prosa'; open_w=False
             if t.strip(): esperando=False
@@ -97,16 +140,35 @@ def extraer(sec, modo='archivo', dest='.'):
 
     RIGHT=308.0
     def paragraphs(lines):
-        paras=[];cur=None;prev=None
+        paras=[];par=None;prev=None;usados=set()
+
+        def abre_verso(l):
+            """Un (N) o (N–M) al principio de linea solo abre parrafo si nombra
+            versos de esta cancion que aun no tienen traduccion y que no se han
+            abierto ya en este bloque. El comentario esta lleno de numeros entre
+            parentesis que no son versos: la referencia de un sloka partida por
+            el salto de linea ('...Sri Stotra-ratna' / '(49):') y las
+            enumeraciones ('(5) kampa, temblor; (6) vaivarnya, palidez'). Abrian
+            versos fantasma y se llevaban por delante el resto del comentario."""
+            m=re.match(r'^'+MK_P,l['text'])
+            if not m or cur is None: return None
+            r=rango(m)
+            if all(n in cur['versos'] and not cur['versos'][n]['trad']
+                   and n not in usados for n in r):
+                return r
+            return None
+
         for l in lines:
             allbold=all('Bold' in f for f in l['fonts'] if f)
             cita=allbold and l['x0']>44
-            brk = (cur is None or re.match(r'^'+MK_P,l['text']) or cita!=cur['cita']
+            r=abre_verso(l)
+            brk = (par is None or r is not None or cita!=par['cita']
                    or (prev and prev['x1']<RIGHT-12))
             if brk:
-                cur={'lines':[l],'cita':cita,'x0':l['x0'],'boldmark':bold_after_marker(l)}
-                paras.append(cur)
-            else: cur['lines'].append(l)
+                if r: usados.update(r)
+                par={'lines':[l],'cita':cita,'x0':l['x0'],'boldmark':bold_after_marker(l)}
+                paras.append(par)
+            else: par['lines'].append(l)
             prev=l
         return paras
 
@@ -132,7 +194,7 @@ def extraer(sec, modo='archivo', dest='.'):
             blocks[-1]['lines'].append(l)
         else: blocks.append({'k':k,'lines':[l]})
 
-    songs=[];cur=None;pending_ben=[]
+    songs=[];cur=None;pending_ben=[];pend_w=[]
     def newsong(n):
         return {'num':n,'versos':{}, 'notas':[]}
     def V(s,n):
@@ -144,9 +206,9 @@ def extraer(sec, modo='archivo', dest='.'):
         if k=='song_num_ben': pending_ben=[]; continue
         if k=='song_num':
             cur=newsong(int(re.sub(r'\D','',b['lines'][0]['text']))); songs.append(cur)
-            for n,ls in pending_ben: 
+            for n,ls in pending_ben:
                 if n: V(cur,n)['ben']=ls
-            pending_ben=[]; continue
+            pending_ben=[]; pend_w=[]; continue
         if k=='bengali':
             groups=[];g=[]
             for l in b['lines']:
@@ -164,9 +226,14 @@ def extraer(sec, modo='archivo', dest='.'):
             for l in b['lines']:
                 g.append(l); m=re.search(r'\[(\d+)\]',l['text'])
                 if m:
-                    V(cur,int(m.group(1)))['tr']=[segs(x) for x in g]; g=[]
+                    # una linea sin ningun segmento no es una linea del verso
+                    V(cur,int(m.group(1)))['tr']=[s for s in (segs(x) for x in g) if s]
+                    g=[]
         elif k=='wbw':
-            g=[]
+            # lo que quedo abierto en el bloque anterior sigue aqui: un glosario
+            # partido por un salto de pagina llega en dos bloques con la
+            # traduccion y el comentario en medio
+            g=pend_w; pend_w=[]
             for l in b['lines']:
                 g.append(l); m=re.search(MK_T+r'\s*$',l['text'].rstrip())
                 if m:
@@ -175,19 +242,23 @@ def extraer(sec, modo='archivo', dest='.'):
                     v['wbw_rango']=r if len(r)>1 else None
                     for n in r: V(cur,n)
                     g=[]
+            pend_w=g
         elif k=='prosa':
             for p in paragraphs(b['lines']):
                 txt=join(p['lines'])
                 m=re.match(r'^'+MK_P+r'\s*',txt)
+                r=rango(m) if m else None
+                # un marcador solo vale si nombra versos de esta cancion
+                conocido=bool(r) and all(n in cur['versos'] for n in r)
                 if p['cita']:
                     cur['notas'].append({'tipo':'cita','texto':[x['text'].strip() for x in p['lines']]})
-                elif m and not p['boldmark'] and not V(cur,rango(m)[-1])['trad']:
-                    r=rango(m); v=V(cur,r[-1])
+                elif conocido and not p['boldmark'] and not V(cur,r[-1])['trad']:
+                    v=V(cur,r[-1])
                     v['trad']=txt[m.end():]; v['trad_rango']=r if len(r)>1 else None
                     for n in r: V(cur,n)
                 else:
-                    verso=rango(m)[0] if m else None
-                    cur['notas'].append({'tipo':'nota','verso':verso,'texto':txt[m.end():] if m else txt})
+                    cur['notas'].append({'tipo':'nota','verso':r[0] if conocido else None,
+                                         'texto':txt[m.end():] if conocido else txt})
 
     for s in songs:
         vs=sorted(s['versos'])
@@ -201,7 +272,7 @@ def extraer(sec, modo='archivo', dest='.'):
     # ================== recortes bengalíes + JSON ==================
     from PIL import Image, ImageOps
     import os, base64, io, re as _re
-    DPI=300; SC=DPI/72.0
+    SC=DPI/72.0
     imgcache={}
     def page_img(n):
         if n not in imgcache: imgcache[n]=Image.open(f'pages300/p-{n:03d}.png').convert('L')
@@ -300,17 +371,18 @@ def extraer(sec, modo='archivo', dest='.'):
     for c in data['canciones']:
         byn={v['n']:v for v in c['versos']}
         for v in c['versos']: v['coment']=[]
-        act=1
+        act=c['versos'][0]['n'] if c['versos'] else None
         for nota in c['notas']:
-            if nota['tipo']=='cita': byn[act]['coment'].append({'t':'cita','x':nota['texto']})
+            if nota['tipo']=='cita':
+                if act in byn: byn[act]['coment'].append({'t':'cita','x':nota['texto']})
             else:
-                if nota.get('verso'): act=nota['verso']
+                if nota.get('verso') in byn: act=nota['verso']
                 if act in byn: byn[act]['coment'].append({'t':'nota','x':nota['texto']})
         del c['notas']
 
     os.makedirs(os.path.join(DEST[0], 'json'), exist_ok=True)
     salida=os.path.join(DEST[0], 'json', sec['slug']+'.json')
-    json.dump(data, open(salida,'w'), ensure_ascii=False)
+    json.dump(data, open(salida,'w',encoding='utf-8'), ensure_ascii=False)
     nlin=sum(len(v['ben']) for c in data['canciones'] for v in c['versos'])
     print('  JSON', round(os.path.getsize(salida)/1024,1),'KB |',
           len(data['canciones']),'canciones |',

@@ -3,7 +3,7 @@
 import pdfplumber, re, json, os
 from secciones import INDICE_KIRTAN
 
-PDF = os.environ.get('SARANAGATI_PDF', '/mnt/user-data/uploads/SARANAGATI.pdf')
+PDF = os.environ.get('SARANAGATI_PDF', 'SARANAGATI.pdf')
 LINEA = re.compile(r'^(.+?)[\s.]{4,}(\d{1,3})$')
 
 def extraer(dest='sitio'):
@@ -18,7 +18,8 @@ def extraer(dest='sitio'):
             primer = re.sub(r'\s*\.\s*$', '', m.group(1)).strip()
             filas.append({'verso': primer, 'pagina': int(m.group(2))})
     os.makedirs(os.path.join(dest, 'json'), exist_ok=True)
-    json.dump(filas, open(os.path.join(dest, 'json', 'kirtan.json'), 'w'), ensure_ascii=False)
+    json.dump(filas, open(os.path.join(dest, 'json', 'kirtan.json'), 'w',
+                          encoding='utf-8'), ensure_ascii=False)
     print('INDICE DE KIRTAN', len(filas), 'entradas, paginas',
           min(f['pagina'] for f in filas), 'a', max(f['pagina'] for f in filas))
     return filas
