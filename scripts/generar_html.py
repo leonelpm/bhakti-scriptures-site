@@ -43,9 +43,24 @@ CSS = r'''
   --serif:"Noto Serif",Georgia,"Times New Roman",serif;
   --sans:"Archivo","Helvetica Neue",Arial,sans-serif;
   --beng:"Noto Serif Bengali","Noto Serif",serif;
-  --benK:.55; --fs:17px; --wrap:37rem;
-  /* alto del encabezado pegajoso: barra + tira de Configuracion */
-  --barH:3.4rem; --cfgH:2.3rem; --topH:calc(var(--barH) + var(--cfgH));
+  /* por defecto: tema claro y letra grande. El claro es el valor de :root y el
+     oscuro solo entra cuando se pide (noche, o automatico con el sistema en
+     oscuro); la letra grande es la de :root y menor y medio son los que anulan.
+     Asi lo que se ve antes de que corra nada ya es lo que toca */
+  --benK:.64; --fs:19px; --wrap:37rem;
+  --inv:none;      /* el recorte impreso es tinta negra: en oscuro hay que invertirlo */
+  /* Titulo y subtitulo de la barra: el triple de lo que median (.82 y .74rem).
+     En pantalla estrecha no cabe el triple junto a los botones, asi que baja
+     con el ancho y no llega a partirse ni a comerse la pantalla */
+  --brandT:clamp(1.6rem,6.2vw,2.46rem); --brandS:clamp(1.45rem,5.6vw,2.22rem);
+  /* Los altos salen de sus propias medidas, no de un numero puesto a ojo: la
+     barra son sus dos lineas mas el relleno y el filete, y la tira de
+     Configuracion su linea mas el relleno y el filete. El encabezado de cancion
+     y el indice lateral se pegan justo debajo, asi que si el numero no cuadra
+     se esconden detras */
+  --barH:calc(var(--brandT) * 1.25 + var(--brandS) * 1.15 + 1.2rem + 1px);
+  --cfgH:calc(.75rem * 1.62 + 1.1rem + 1px);
+  --topH:calc(var(--barH) + var(--cfgH));
   /* ritmo vertical. Sin filetes la jerarquia la marca el blanco: cada escalon
      tiene que leerse mayor que el de dentro */
   --sep1:1.35rem;  /* entre bengali y transliteracion, la misma capa */
@@ -55,23 +70,24 @@ CSS = r'''
   --rail:11rem;
   color-scheme:light;
 }
-/* tema oscuro por preferencia del sistema, salvo que se haya pedido dia */
+/* tema oscuro: solo a peticion. 'noche' siempre, 'automatico' si el sistema lo
+   pide. data-th lo pone PREFS antes de pintar; el radio manda sin JavaScript */
 @media (prefers-color-scheme:dark){
-  html:not([data-th="dia"]) body:not(:has(#th-dia:checked)){
+  html[data-th="auto"] body,
+  body:has(#th-auto:checked){
     --bg:#101215; --surface:#161A1D; --ink:#E3E4DD; --ink2:#A2A79E; --ink3:#767C74;
-    --rule:#282D31; --accent:#93A9D2; --mark:#C9A557; color-scheme:dark;
+    --rule:#282D31; --accent:#93A9D2; --mark:#C9A557; --inv:invert(1); color-scheme:dark;
   }
 }
-/* tema oscuro pedido a mano. data-th lo pone PREFS; el radio manda sin JavaScript */
 html[data-th="noche"] body,
 body:has(#th-noche:checked){
   --bg:#101215; --surface:#161A1D; --ink:#E3E4DD; --ink2:#A2A79E; --ink3:#767C74;
-  --rule:#282D31; --accent:#93A9D2; --mark:#C9A557; color-scheme:dark;
+  --rule:#282D31; --accent:#93A9D2; --mark:#C9A557; --inv:invert(1); color-scheme:dark;
 }
 html[data-tam="menor"] body,
 body:has(#tam-menor:checked){--fs:15.5px;--benK:.47}
-html[data-tam="mayor"] body,
-body:has(#tam-mayor:checked){--fs:19px;--benK:.64}
+html[data-tam="medio"] body,
+body:has(#tam-medio:checked){--fs:17px;--benK:.55}
 body:has(#cap-ben:not(:checked)) .ben,
 body:has(#cap-tr:not(:checked)) .tr,
 body:has(#cap-trad:not(:checked)) .trad,
@@ -81,32 +97,41 @@ body:has(#cap-orig:not(:checked)) .orig{display:none}
 
 *,*::before,*::after{box-sizing:inherit}
 html{scroll-padding-top:calc(env(safe-area-inset-top,0px) + var(--topH) + 1rem);
-  -webkit-text-size-adjust:100%}
+  scroll-behavior:smooth;-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--serif);font-size:var(--fs);
   line-height:1.62;-webkit-font-smoothing:antialiased}
 :focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
-.oculto{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+/* Anclado a la izquierda a proposito: si se queda en su sitio natural, junto
+   al boton de tema, sus hijos desbordan por la derecha y la pagina coge scroll
+   horizontal aunque no se vean */
+.oculto{position:absolute;left:0;top:0;width:1px;height:1px;
+  overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
 
-/* barra */
-.bar{position:sticky;top:0;z-index:40;background:color-mix(in srgb,var(--bg) 90%,transparent);
+/* barra. La barra y Configuracion se pegan juntas en un solo contenedor, asi
+   no hay que acertar la altura de la barra para que Configuracion caiga debajo */
+.top{position:sticky;top:0;z-index:40}
+.bar{background:color-mix(in srgb,var(--bg) 96%,transparent);
   backdrop-filter:blur(10px);border-bottom:1px solid var(--rule)}
 .barIn{display:flex;align-items:center;gap:.7rem;max-width:74rem;margin:0 auto;
   padding:.6rem clamp(.9rem,3vw,1.4rem);min-height:calc(var(--barH) - 1px)}
-.brand{font-family:var(--sans);font-weight:600;font-size:.82rem;letter-spacing:.02em;line-height:1.25}
-.brand em{display:block;font-style:normal;font-weight:400;font-size:.74rem;color:var(--ink3)}
+.brand{flex:0 1 auto;min-width:0;font-family:var(--sans);font-weight:600;
+  font-size:var(--brandT);letter-spacing:.01em;line-height:1.25;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand em{display:block;font-style:normal;font-weight:400;font-size:var(--brandS);
+  line-height:1.15;color:var(--ink3);overflow:hidden;text-overflow:ellipsis}
 
 /* boton de tema: dos etiquetas superpuestas, se ve la del tema contrario al que
    hay puesto. Mueve los mismos radios que estaban en Configuracion, asi que no
    puede contradecirlos */
 .tema{display:flex;align-items:center;flex:none}
 .tema>label{display:none;align-items:center;justify-content:center;
-  width:1.9rem;height:1.9rem;border-radius:99px;cursor:pointer;color:var(--ink3)}
+  width:2.8rem;height:2.8rem;border-radius:99px;cursor:pointer;color:var(--ink3)}
 .tema>label:hover{color:var(--ink);background:var(--rule)}
-.tema svg{width:1.05rem;height:1.05rem;display:block}
+.tema svg{width:1.5rem;height:1.5rem;display:block}
 .tema .aLuna{display:flex}
 @media (prefers-color-scheme:dark){
-  html:not([data-th="dia"]) body:not(:has(#th-dia:checked)) .aLuna{display:none}
-  html:not([data-th="dia"]) body:not(:has(#th-dia:checked)) .aSol{display:flex}
+  html[data-th="auto"] .aLuna,body:has(#th-auto:checked) .aLuna{display:none}
+  html[data-th="auto"] .aSol,body:has(#th-auto:checked) .aSol{display:flex}
 }
 html[data-th="noche"] .aLuna,body:has(#th-noche:checked) .aLuna{display:none}
 html[data-th="noche"] .aSol,body:has(#th-noche:checked) .aSol{display:flex}
@@ -114,20 +139,26 @@ html[data-th="dia"] .aLuna{display:flex}
 html[data-th="dia"] .aSol{display:none}
 
 .jump{display:flex;flex-wrap:nowrap;gap:.1rem;margin-left:auto;
-  max-width:min(58%,24rem);overflow-x:auto;scrollbar-width:none}
+  max-width:min(48%,20rem);overflow-x:auto;scrollbar-width:none}
 .jump::-webkit-scrollbar{display:none}
 .jump a{flex:none;font-family:var(--sans);font-size:.78rem;color:var(--ink3);text-decoration:none;
   padding:.3rem .5rem;border-radius:5px}
 .jump a:hover{color:var(--ink);background:var(--rule)}
+/* con el titulo al triple, en pantalla estrecha la barra solo aguanta el
+   enlace al indice: los saltos de cancion y el anterior/siguiente se quedan
+   en el pie de la pagina, donde estan repetidos */
+@media (max-width:699px){
+  .jump{display:none}
+  .barIn .pasos .ir[rel]{display:none}
+}
 
-/* Configuracion: tira pegajosa justo debajo de la barra, acompana al lector.
+/* Configuracion: tira debajo de la barra, dentro del mismo bloque pegajoso.
    El panel va absoluto para que abrirlo no empuje el texto ni engorde la tira */
-details.cfg{position:sticky;top:var(--barH);z-index:35;
-  border-bottom:1px solid var(--rule);background:var(--surface)}
+details.cfg{position:relative;border-bottom:1px solid var(--rule);background:var(--surface)}
 details.cfg>summary{list-style:none;cursor:pointer;max-width:74rem;margin:0 auto;
-  padding:.55rem clamp(.9rem,3vw,1.4rem);min-height:calc(var(--cfgH) - 1px);
-  font-family:var(--sans);font-size:.75rem;letter-spacing:.02em;color:var(--ink3);
-  display:flex;align-items:center;gap:.45rem}
+  padding:.55rem clamp(.9rem,3vw,1.4rem);
+  font-family:var(--sans);font-size:.75rem;line-height:1.62;letter-spacing:.02em;
+  color:var(--ink3);display:flex;align-items:center;gap:.45rem}
 details.cfg>summary::-webkit-details-marker{display:none}
 details.cfg>summary::before{content:"";width:.4rem;height:.4rem;border-right:1.4px solid currentColor;
   border-bottom:1.4px solid currentColor;transform:rotate(-45deg);margin-bottom:.12rem}
@@ -148,6 +179,22 @@ legend{font-family:var(--sans);font-size:.68rem;letter-spacing:.09em;color:var(-
 .opts label:has(input:checked){border-color:var(--mark);color:var(--ink);
   background:color-mix(in srgb,var(--mark) 12%,transparent)}
 .opts label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
+
+/* subir al principio: sigue al lector y lo devuelve arriba sin JavaScript.
+   Donde haya linea de tiempo de scroll asoma al alejarse de la cabecera */
+.arriba{position:fixed;z-index:45;
+  right:clamp(.9rem,3vw,1.6rem);bottom:clamp(.9rem,3vw,1.6rem);
+  display:flex;align-items:center;justify-content:center;
+  width:2.9rem;height:2.9rem;border-radius:99px;text-decoration:none;
+  background:var(--surface);border:1px solid var(--rule);color:var(--ink2);
+  box-shadow:0 8px 20px -10px rgba(0,0,0,.45)}
+.arriba:hover{color:var(--ink);border-color:var(--mark)}
+.arriba svg{width:1.2rem;height:1.2rem;display:block}
+@supports (animation-timeline:scroll()){
+  .arriba{opacity:0;visibility:hidden;
+    animation:asomar linear both;animation-timeline:scroll();animation-range:0 340px}
+  @keyframes asomar{to{opacity:1;visibility:visible}}
+}
 
 /* buscador: solo aparece si hay JavaScript */
 .buscar{display:none}
@@ -174,16 +221,23 @@ main{padding:0 clamp(1rem,4vw,2rem) 6rem;max-width:var(--wrap);margin:0 auto}
     overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;
     padding:0 .4rem 1.2rem 0}
   .rail h2{font-family:var(--sans);font-size:.68rem;letter-spacing:.09em;color:var(--ink3);
-    margin:0 0 .7rem;font-weight:600}
-  .rail a{display:block;padding:.4rem 0 .4rem .7rem;font-size:.86rem;color:var(--ink2);
+    margin:0 0 .2rem;font-weight:600}
+  .rail .pista{font-family:var(--sans);font-size:.66rem;color:var(--ink3);
+    margin:0 0 .8rem;line-height:1.35;opacity:.85}
+  .rail a{display:flex;gap:.5rem;padding:.4rem 0 .4rem .7rem;font-size:.86rem;color:var(--ink2);
     text-decoration:none;border-left:2px solid transparent;line-height:1.35}
   .rail a:hover{color:var(--ink);border-left-color:var(--rule)}
-  .rail a b{font-weight:500;color:var(--ink);font-variant-numeric:tabular-nums}
-  .jump{display:none}
+  .rail a b{flex:none;min-width:1.2rem;font-weight:500;color:var(--mark);
+    font-variant-numeric:tabular-nums}
   .barIn .pasos{margin-left:auto}
 }
 
-/* portada */
+/* portada: la barra solo lleva el boton, porque el titulo grande ya esta
+   justo debajo en la cabecera y repetirlo al triple sobra */
+/* --topH se resuelve en :root, asi que no basta con cambiar --barH aqui:
+   hay que volver a declararlo o la portada se cree que lleva la barra alta */
+body.portada{--barH:calc(2.8rem + 1.2rem + 1px); --cfgH:0px; --topH:var(--barH)}
+body.portada .barIn{min-height:0;justify-content:flex-end}
 .head{padding:3.4rem 0 0;margin-bottom:3.4rem}
 .head .over{font-family:var(--sans);font-size:.72rem;letter-spacing:.1em;color:var(--ink3);margin:0 0 .9rem}
 .head h1{font-size:2.1rem;font-weight:500;letter-spacing:-.01em;margin:0;line-height:1.15}
@@ -206,17 +260,18 @@ main{padding:0 clamp(1rem,4vw,2rem) 6rem;max-width:var(--wrap);margin:0 auto}
 @media (min-width:1180px){.vno{display:block}.vtop{display:none}}
 
 .ben{display:flex;flex-direction:column;align-items:center;gap:.55rem;margin:0 0 var(--sep1)}
-.benRow{display:flex;flex-direction:column;align-items:center;gap:.1rem;width:100%}
+.benRow{display:flex;flex-direction:column;align-items:center;gap:.25rem;width:100%}
 .benU{font-family:var(--beng);font-size:1.34em;line-height:1.95;margin:0;text-align:center;font-weight:500}
 .benU i{font-style:normal}
 .benU i+i{margin-left:1.6em}
 .benU .danda{color:var(--mark)}
 @media (max-width:520px){.benU{font-size:1.2em}.benU i+i{margin-left:.9em}}
-.orig{opacity:.4;width:min(100%,calc(var(--w) * var(--benK) * .74px))}
-.benL{display:block;background-color:currentColor;opacity:.93;
-  width:min(100%,calc(var(--w) * var(--benK) * 1px));aspect-ratio:var(--w) / var(--h);
-  -webkit-mask-image:var(--m);mask-image:var(--m);
-  -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-size:100% 100%;mask-size:100% 100%}
+/* El recorte del bengali impreso va como <img> y no como mascara CSS: Chrome no
+   carga las mascaras cuando la pagina se abre con file://, y la capa de
+   auditoria desaparecia entera al mirar el sitio en local. Como el recorte es
+   tinta negra sobre nada, en tema oscuro se invierte con --inv */
+.orig{display:block;height:auto;opacity:.55;filter:var(--inv);
+  width:min(100%,calc(var(--w) * var(--benK) * 1px))}
 .tr{margin:0 0 var(--sep2);text-align:center;font-weight:500;line-height:1.75;letter-spacing:.005em}
 .tr span{display:block}
 .tr span i{font-style:normal}
@@ -250,7 +305,7 @@ blockquote.cita+blockquote.cita{margin-top:0}
 blockquote.cita:first-child{margin-top:0}
 blockquote.cita:last-child{margin-bottom:0}
 
-.barIn .pasos{margin-left:.2rem}
+.barIn .pasos{margin-left:.2rem;flex-wrap:nowrap}
 .pasos{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}
 .pasos .ir{font-family:var(--sans);font-size:.78rem;color:var(--ink2);text-decoration:none;
   padding:.3rem .62rem;border:1px solid var(--rule);border-radius:99px;white-space:nowrap}
@@ -258,13 +313,16 @@ blockquote.cita:last-child{margin-bottom:0}
 main>.pasos{margin:3.4rem 0 0;justify-content:space-between}
 .pie{margin:3rem 0 0;font-family:var(--sans);font-size:.78rem;line-height:1.6;color:var(--ink3)}
 @media print{
-  .bar,details.cfg,.rail,.vacio,.pasos{display:none}
+  .top,.bar,details.cfg,.rail,.vacio,.pasos,.arriba{display:none}
   body{--fs:11pt;background:#fff;color:#000}
   .verse{break-inside:avoid}
 }
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media (prefers-reduced-motion:reduce){
+  *{transition:none!important;animation:none!important}
+  html{scroll-behavior:auto}
+  .arriba{opacity:1;visibility:visible}
+}
 '''
-
 JS = r'''
 document.documentElement.dataset.js = '1';
 const fold = s => s.normalize('NFD').replace(/\p{M}/gu,'').toLowerCase();
@@ -284,6 +342,31 @@ campo.addEventListener('input', () => {
   vacio.style.display = filtrando && !hallados ? 'block' : 'none';
 });
 '''
+
+FLECHA = ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+          'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+          '<path d="M12 19V5M5 12l7-7 7 7"/></svg>')
+
+ARRIBA = ('<a class="arriba" href="#" title="Subir al principio" '
+          'aria-label="Subir al principio">%s</a>' % FLECHA)
+
+
+def bloque_tema():
+    """El boton de tema de la barra, con los tres radios que mueve. Van ocultos
+    pero siguen en el documento: son ellos los que llevan el tema cuando no hay
+    JavaScript, y por eso el boton no puede contradecirlos. Lo usan tanto las
+    secciones como la portada."""
+    return ('<div class="tema">'
+            '<fieldset class="oculto"><legend>Tema</legend><div class="opts">'
+            + radios('th', [('th-dia', 'Dia', True), ('th-noche', 'Noche', False),
+                            ('th-auto', 'Automatico', False)])
+            + '</div></fieldset>'
+            f'<label class="aLuna" for="th-noche" title="Tema oscuro">{LUNA}'
+            '<span class="oculto">Tema oscuro</span></label>'
+            f'<label class="aSol" for="th-dia" title="Tema claro">{SOL}'
+            '<span class="oculto">Tema claro</span></label>'
+            '</div>')
+
 
 def radios(nombre, items):
     out = []
@@ -316,9 +399,10 @@ def verso_html(c, v, con_original=True):
                          .replace('&lt;/danda&gt;', '</b>') + '</i>' for x in partes)
         p.append('<div class="benRow"><p class="benU" lang="bn">' + cuerpo + '</p>')
         if con_original:
+            # <img> y no mascara CSS: Chrome no carga las mascaras con file://
             u = im['src'] if 'src' in im else f'data:image/png;base64,{im["png"]}'
-            p.append(f'<span class="benL orig" style="--w:{im["w"]};--h:{im["h"]};'
-                     f'--m:url({u})"></span>')
+            p.append(f'<img class="orig" src="{u}" width="{im["w"]}" height="{im["h"]}" '
+                     f'alt="" loading="lazy" decoding="async" style="--w:{im["w"]}">')
         p.append('</div>')
     p.append('</div>')
 
@@ -368,8 +452,14 @@ def construir(D, con_buscador=True, nota=None, con_original=True, css='inline', 
     """Arma el documento. con_buscador=False deja la pagina sin mas JavaScript
     que PREFS, las diez lineas del <head> que recuerdan tamano y tema."""
     sec = D['seccion']
-    rail = '\n'.join(f'<a href="#c{c["n"]}"><b>{c["n"]}</b>  {esc(c["titulo"])}</a>' for c in D['canciones'])
-    jump = '\n'.join(f'<a href="#c{c["n"]}">{c["n"]}</a>' for c in D['canciones'])
+    # el numero del indice lateral es el de la cancion tal como lo numera el
+    # libro, no un conteo de esta pagina: por eso Atma-nivedanatmika empieza
+    # en la 6 y no en la 1
+    rail = '\n'.join(
+        f'<a href="#c{c["n"]}" title="Canción {c["n"]} · {esc(c["titulo"])}">'
+        f'<b>{c["n"]}</b><span>{esc(c["titulo"])}</span></a>' for c in D['canciones'])
+    jump = '\n'.join(f'<a href="#c{c["n"]}" title="Canción {c["n"]}">{c["n"]}</a>'
+                     for c in D['canciones'])
 
     canciones = []
     for c in D['canciones']:
@@ -392,19 +482,7 @@ def construir(D, con_buscador=True, nota=None, con_original=True, css='inline', 
     items += [('cap-tr', 'Transliteracion'), ('cap-trad', 'Traduccion'),
               ('cap-wbw', 'Palabra por palabra'), ('cap-com', 'Comentario')]
     capas = checks(items)
-    # Los radios de tema ya no se ensenan en Configuracion: los mueve el boton de
-    # la barra. Siguen en el documento porque son ellos los que llevan el tema
-    # cuando no hay JavaScript.
-    tema = ('<div class="tema">'
-            '<fieldset class="oculto"><legend>Tema</legend><div class="opts">'
-            + radios('th', [('th-auto', 'Automatico', True), ('th-dia', 'Dia', False),
-                            ('th-noche', 'Noche', False)])
-            + '</div></fieldset>'
-            f'<label class="aLuna" for="th-noche" title="Tema oscuro">{LUNA}'
-            '<span class="oculto">Tema oscuro</span></label>'
-            f'<label class="aSol" for="th-dia" title="Tema claro">{SOL}'
-            '<span class="oculto">Tema claro</span></label>'
-            '</div>')
+    tema = bloque_tema()
     hoja = f'<style>{CSS}</style>' if css == 'inline' else f'<link rel="stylesheet" href="{css}">'
     nav = nav or {}
     enlaces = ['<a class="ir" href="%s">Índice</a>' % nav['indice']] if nav.get('indice') else []
@@ -426,6 +504,7 @@ def construir(D, con_buscador=True, nota=None, con_original=True, css='inline', 
 </head>
 <body>
 
+<div class="top">
 <header class="bar">
   <div class="barIn">
     <div class="brand">&#346;ara&#7751;&#257;gati<em>{esc(sec["rom"])}</em></div>
@@ -443,13 +522,15 @@ def construir(D, con_buscador=True, nota=None, con_original=True, css='inline', 
       {capas}
     </div></fieldset>
     <fieldset><legend>TAMANO</legend><div class="opts">
-      {radios('tam',[('tam-menor','Menor',False),('tam-medio','Medio',True),('tam-mayor','Mayor',False)])}
+      {radios('tam',[('tam-menor','Menor',False),('tam-medio','Medio',False),('tam-mayor','Mayor',True)])}
     </div></fieldset>
   </div>
 </details>
+</div>
 
 <div class="shell">
-  <nav class="rail" aria-label="Canciones"><h2>CANCIONES</h2>{rail}</nav>
+  <nav class="rail" aria-label="Canciones"><h2>CANCIONES</h2>
+    <p class="pista">El n&#250;mero es el de la canci&#243;n en el libro.</p>{rail}</nav>
   <main>
     <div class="head">
       <p class="over">&#346;r&#299; Laghu-chandrik&#257;-bh&#257;&#7779;ya</p>
@@ -463,6 +544,7 @@ def construir(D, con_buscador=True, nota=None, con_original=True, css='inline', 
   </main>
 </div>
 
+{ARRIBA}
 {script}
 </body>
 </html>

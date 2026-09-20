@@ -56,8 +56,17 @@ def dom(sec, D, fallos):
             tot['ben'] += n
             if n != len(v['ben']):
                 fallos.append(f'{ref}: {len(v["ben"])} lineas bengalies, {n} en el DOM')
-            o = len(art.select('.ben .benL'))
-            tot['orig'] += o
+            recortes = art.select('.ben img.orig')
+            tot['orig'] += len(recortes)
+            for im in recortes:
+                # el recorte tiene que existir de verdad y traer sus medidas,
+                # o la pagina salta al cargar y la capa de auditoria miente
+                src = im.get('src', '')
+                if not src.startswith('data:') and not os.path.exists(
+                        os.path.join(DEST, src.replace('/', os.sep))):
+                    fallos.append(f'{ref}: falta el recorte {src}')
+                if not (im.get('width') and im.get('height')):
+                    fallos.append(f'{ref}: recorte sin medidas {src}')
 
             n = len(art.select('p.tr > span'))
             tot['tr'] += n
@@ -122,6 +131,15 @@ def dom(sec, D, fallos):
     for r in ('th-auto', 'th-dia', 'th-noche', 'tam-menor', 'tam-medio', 'tam-mayor'):
         if not S.find(id=r):
             fallos.append(f'{sec["slug"]}: falta el radio #{r}')
+    # los valores por defecto: tema claro y letra grande
+    for r, quien in (('th-dia', 'el tema claro'), ('tam-mayor', 'la letra grande')):
+        el = S.find(id=r)
+        if el is not None and not el.has_attr('checked'):
+            fallos.append(f'{sec["slug"]}: {quien} no viene marcado por defecto (#{r})')
+    if not S.select_one('a.arriba[href="#"]'):
+        fallos.append(f'{sec["slug"]}: falta el botón de subir al principio')
+    if not S.select_one('.top .bar') or not S.select_one('.top details.cfg'):
+        fallos.append(f'{sec["slug"]}: la barra y Configuración no van en el mismo bloque pegajoso')
     if S.select_one('details.cfg .cfgIn #th-dia'):
         fallos.append(f'{sec["slug"]}: el tema sigue enseñandose en Configuracion')
     if _texto(S.select_one('details.cfg > summary')) != 'Configuración':
@@ -193,11 +211,19 @@ def hoja(fallos):
         if b is None or trozo not in b.replace(' ', ''):
             fallos.append(f'estilo.css: {nombre} ({sel} deberia llevar {trozo})')
 
-    exige('details.cfg', 'position:sticky', 'Configuracion no acompaña al scroll')
-    exige('details.cfg', 'top:var(--barH)', 'Configuracion no va pegada a la barra')
+    exige('.top', 'position:sticky', 'la barra y Configuracion no acompañan al scroll')
+    exige('.top', 'top:0', 'el bloque de arriba no va pegado al borde')
     exige('.cfgIn', 'position:absolute', 'el panel de Configuracion empuja el texto')
     exige('.rail', 'position:fixed', 'el indice lateral sigue en el flujo')
     exige('main', 'margin:0auto', 'la columna de lectura no va centrada')
+    exige('.arriba', 'position:fixed', 'el boton de subir no acompaña al scroll')
+    # el recorte impreso va como <img>: con mascara CSS Chrome no lo carga desde file://
+    for sel in ('.orig', '.benL'):
+        b = cuerpo(sel) or ''
+        if 'mask-image' in b:
+            fallos.append(f'estilo.css: el recorte impreso ha vuelto a ser una mascara CSS ({sel}), '
+                          'no se vera al abrir la pagina con file://')
+    exige('.orig', 'filter:var(--inv)', 'el recorte impreso no se invierte en tema oscuro')
     if 'blockquote.cita' not in css or 'border-left' not in cuerpo('blockquote.cita'):
         fallos.append('estilo.css: las citas se han quedado sin su filete de acento')
     print(f'  estilo.css                   sin filetes en el cuerpo, '
@@ -236,10 +262,12 @@ def _casa(sel, media_oscuro, est):
     return True
 
 
-def tema(fallos):
+def tema(fallos, defecto='th-dia'):
     """El boton de la barra y los tres radios tienen que decir siempre lo mismo.
     Se recorren todos los estados posibles y se comprueba que se ve un solo icono
-    y que es el del tema contrario al que esta puesto."""
+    y que es el del tema contrario al que esta puesto. `defecto` es el radio que
+    viene marcado en el HTML, que es el que manda hasta que PREFS restaura el
+    guardado al cargar el DOM."""
     css = open(os.path.join(DEST, 'estilo.css'), encoding='utf-8').read()
     oscuro, iconos = [], []
     import tinycss2
@@ -283,8 +311,12 @@ def tema(fallos):
         for radio in ('th-auto', 'th-dia', 'th-noche'):
             estados.append(dict(sistema_oscuro=sis, data_th=None, radio=radio))
         for dth in ('auto', 'dia', 'noche'):
-            estados.append(dict(sistema_oscuro=sis, data_th=dth, radio='th-auto'))
+            estados.append(dict(sistema_oscuro=sis, data_th=dth, radio=defecto))
             estados.append(dict(sistema_oscuro=sis, data_th=dth, radio='th-' + dth))
+    # sin nada guardado y sin tocar nada tiene que verse el claro
+    if es_oscuro(dict(sistema_oscuro=True, data_th=None, radio=defecto)):
+        fallos.append('tema: sin preferencia guardada y con el sistema en oscuro '
+                      'la pagina no arranca en claro')
 
     n = 0
     for est in estados:
@@ -377,6 +409,126 @@ def anchos(fallos):
           f'{peor[1]:.0f}px a {peor[0]}px')
 
 
+def portada(fallos):
+    """La portada lleva el mismo boton de tema y los mismos radios que las
+    secciones, o se queda colgada del tema del sistema sin poder cambiarlo."""
+    ruta = os.path.join(DEST, 'index.html')
+    if not os.path.exists(ruta):
+        fallos.append('falta index.html')
+        return None
+    S = BeautifulSoup(open(ruta, encoding='utf-8').read(), 'html.parser')
+    if not S.select_one('.top .bar .tema label.aLuna[for="th-noche"]'):
+        fallos.append('index.html: la portada no lleva el botón de tema')
+    for r in ('th-dia', 'th-noche', 'th-auto'):
+        if not S.find(id=r):
+            fallos.append(f'index.html: falta el radio #{r}')
+    el = S.find(id='th-dia')
+    if el is not None and not el.has_attr('checked'):
+        fallos.append('index.html: el tema claro no viene marcado por defecto')
+    if not S.select_one('a.arriba[href="#"]'):
+        fallos.append('index.html: falta el botón de subir al principio')
+    js = [s for s in S.head.find_all('script') if s.string and 'localStorage' in s.string]
+    if not js:
+        fallos.append('index.html: la portada no restaura el tema guardado')
+    print(f'  index.html                   botón de tema, tres radios, '
+          f'restaura lo guardado, botón de subir')
+    return S
+
+
+MEDIDAS = [(1400, 950), (1180, 900), (900, 800), (390, 844)]
+
+
+def navegador(fallos, paginas):
+    """Pasada en un navegador de verdad, con file://, que es como se mira el
+    sitio en local. Se salta sola si no hay playwright instalado:
+
+        pip install playwright && playwright install chromium
+
+    Comprueba lo que ninguna lectura del HTML puede ver: que los recortes
+    cargan (con mascara CSS no cargaban desde file:// y la capa de auditoria
+    desaparecia entera), que el alto real del bloque de arriba coincide con
+    --topH y por tanto el encabezado de cancion no se esconde detras, que no
+    aparece scroll horizontal, y que el boton de tema hace lo que dice."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print('  playwright no instalado, se omite la pasada en navegador')
+        return
+    raiz = 'file:///' + os.path.abspath(DEST).replace(os.sep, '/').lstrip('/')
+    with sync_playwright() as pw:
+        nav = pw.chromium.launch()
+        for arch in paginas:
+            for an, al in MEDIDAS:
+                pg = nav.new_page(viewport={'width': an, 'height': al}, color_scheme='dark')
+                rotas = []
+                pg.on('requestfailed', lambda r: rotas.append(r.url.rsplit('/', 1)[-1]))
+                pg.goto(f'{raiz}/{arch}')
+                pg.wait_for_timeout(500)
+                pg.mouse.wheel(0, 2600)
+                pg.wait_for_timeout(500)
+                d = pg.evaluate("""() => {
+                  const q=s=>document.querySelector(s), D=document.documentElement;
+                  const px=v=>{const e=document.createElement('div');e.style.height=v;
+                    document.body.appendChild(e);
+                    const h=e.getBoundingClientRect().height;e.remove();return h};
+                  const cs=getComputedStyle(document.body), top=q('.top');
+                  const imgs=[...document.querySelectorAll('img.orig')];
+                  const cab=top?top.getBoundingClientRect().bottom:0;
+                  const sh=[...document.querySelectorAll('.songHead')]
+                      .map(e=>e.getBoundingClientRect())
+                      .filter(r=>r.top>-40 && r.top<cab+40)[0];
+                  return {topReal: top?top.getBoundingClientRect().height:0,
+                          topVar: px(cs.getPropertyValue('--topH')),
+                          tapado: sh? +(cab - sh.top).toFixed(1) : 0,
+                          rotas: imgs.filter(i=>{
+                              const r=i.getBoundingClientRect();
+                              if(r.bottom<-300||r.top>innerHeight+300) return false;
+                              return !(i.complete && i.naturalWidth>0);}).length,
+                          imgs: imgs.length,
+                          scrollX: D.scrollWidth > D.clientWidth + 1,
+                          bg: cs.backgroundColor, fs: cs.fontSize};
+                }""")
+                ref = f'{arch} a {an}px'
+                if rotas:
+                    fallos.append(f'{ref}: no cargan {len(set(rotas))} recursos, '
+                                  f'p.ej. {sorted(set(rotas))[:2]}')
+                if d['rotas']:
+                    fallos.append(f"{ref}: {d['rotas']} recortes a la vista no pintan (de {d['imgs']} en la pagina)")
+                if abs(d['topReal'] - d['topVar']) > 1.5:
+                    fallos.append(f"{ref}: el bloque de arriba mide {d['topReal']:.1f}px "
+                                  f"y --topH dice {d['topVar']:.1f}px")
+                if d['tapado'] > 1.5:
+                    fallos.append(f"{ref}: el encabezado de canción queda {d['tapado']}px "
+                                  f'por detrás de la barra')
+                if d['scrollX']:
+                    fallos.append(f'{ref}: la página se desborda a lo ancho')
+                # el sistema esta en oscuro y aun asi tiene que salir el claro
+                if d['bg'] != 'rgb(243, 244, 239)':
+                    fallos.append(f"{ref}: no arranca en tema claro ({d['bg']})")
+                if d['fs'] != '19px':
+                    fallos.append(f"{ref}: no arranca en letra grande ({d['fs']})")
+                if an == 1400:
+                    pg.click('.tema label.aLuna')
+                    pg.wait_for_timeout(400)
+                    n = pg.evaluate("""() => {
+                      const im=document.querySelector('img.orig');
+                      return {bg:getComputedStyle(document.body).backgroundColor,
+                              th:document.documentElement.getAttribute('data-th'),
+                              inv:im?getComputedStyle(im).filter:'invert(1)',
+                              sol:getComputedStyle(document.querySelector('.aSol')).display};
+                    }""")
+                    if n['bg'] == 'rgb(243, 244, 239)' or n['th'] != 'noche':
+                        fallos.append(f'{ref}: pulsar la luna no pone el tema oscuro')
+                    if n['sol'] == 'none':
+                        fallos.append(f'{ref}: en oscuro no aparece el sol')
+                    if n['inv'] != 'invert(1)':
+                        fallos.append(f'{ref}: en oscuro el recorte no se invierte')
+                pg.close()
+        nav.close()
+    print(f'  {len(paginas)} páginas × {len(MEDIDAS)} anchos   recortes cargados, '
+          f'--topH cuadra con lo pintado, sin desbordes, tema claro y letra grande de salida')
+
+
 def main():
     pedidas = sys.argv[1:]
     fallos = []
@@ -390,12 +542,23 @@ def main():
             continue
         vistas += 1
         dom(s, json.load(open(ruta, encoding='utf-8')), fallos)
+    print('PORTADA')
+    S = portada(fallos)
+    defecto = 'th-dia'
+    for r in ('th-dia', 'th-noche', 'th-auto'):
+        el = S.find(id=r) if S else None
+        if el is not None and el.has_attr('checked'):
+            defecto = r
     print('HOJA')
     hoja(fallos)
     print('TEMA')
-    tema(fallos)
+    tema(fallos, defecto)
     print('ANCHOS')
     anchos(fallos)
+    print('NAVEGADOR')
+    navegador(fallos, [archivo(s) for s in SECCIONES
+                       if os.path.exists(os.path.join(DEST, archivo(s)))
+                       and (not pedidas or s['slug'] in pedidas)][:2] + ['index.html'])
     if not vistas:
         print('no hay ninguna sección extraída en', os.path.join(DEST, 'json'))
         return 1

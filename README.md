@@ -24,13 +24,27 @@ lleva el tema son los radios y el script solo los recuerda.
 
 ## Interfaz
 
-- **Configuración** es la pestaña desplegable de debajo de la barra. Va pegada a
-  ella mientras se hace scroll y el panel se abre por encima del texto, sin
-  empujarlo. Lleva las capas y el tamaño de letra.
-- **El tema** no está en Configuración: es el botón de la barra, al lado del
-  título. Enseña la luna cuando estás en claro y el sol cuando estás en oscuro, y
-  mueve los mismos tres radios de siempre (automático, día, noche), que siguen en
-  el documento aunque no se vean. Por eso no puede contradecirlos.
+- **Por defecto: tema claro y letra grande.** El claro es el valor de `:root` y
+  el oscuro solo entra cuando se pide, así que el sistema en oscuro ya no arrastra
+  la página. La letra grande también es la de `:root`, y «menor» y «medio» son los
+  que anulan. Así lo primero que se pinta ya es lo que toca, sin parpadeo.
+- **Configuración** es la pestaña desplegable de debajo de la barra. La barra y
+  ella van dentro de un mismo bloque pegajoso (`.top`), así que acompañan al
+  scroll juntas sin tener que acertar a mano dónde acaba una y empieza la otra.
+  El panel se abre por encima del texto, sin empujarlo. Lleva las capas y el
+  tamaño de letra.
+- **El tema** no está en Configuración: es el botón de la barra. Enseña la luna
+  cuando estás en claro y el sol cuando estás en oscuro, y mueve los mismos tres
+  radios de siempre (día, noche, automático), que siguen en el documento aunque no
+  se vean. Por eso no puede contradecirlos. La portada lleva el mismo botón, en
+  una barra estrecha, y obedece al tema guardado igual que las secciones.
+- **El botón de subir al principio** va fijo abajo a la derecha en todas las
+  páginas. Es un enlace a `#`, así que funciona sin JavaScript; donde hay línea de
+  tiempo de scroll asoma al alejarse de la cabecera.
+- **El título y el subtítulo de la barra** miden el triple de lo que medían
+  (`--brandT`, `--brandS`). En pantalla estrecha bajan con el ancho, porque al
+  triple no caben junto a los botones; ahí la barra se queda solo con el enlace al
+  índice y el resto de la navegación se usa desde el pie.
 - **El cuerpo del texto no lleva ninguna línea divisoria.** Las capas se
   distinguen por el blanco y por los rótulos: `--sep1` entre el bengalí y la
   transliteración, que son la misma capa; `--sep2` antes de cada rótulo
@@ -42,7 +56,10 @@ lleva el tema son los radios y el script solo los recuerda.
   comentarista trae de fuera, y es lo único que lo distingue de su propia prosa.
 - **El índice lateral de canciones** va fijo, fuera del flujo, para que la columna
   de lectura quede centrada en la pantalla y no en el hueco que sobra. Aparece a
-  partir de 1180 px. El punto de ruptura no es libre: sale de la cuenta que hace
+  partir de 1180 px. El número de cada fila es **el de la canción en el libro**,
+  no un conteo de la página: por eso Ātma-nivedanātmikā empieza en la 6. El libro
+  numera del 1 al 32 de Maṅgalācharaṇa a Ānukūlyātmikā y vuelve a empezar en
+  Bhajana-lālasā, que va del 1 al 13 y sigue en Siddhi-lālasā del 14 al 16. El punto de ruptura no es libre: sale de la cuenta que hace
   `verificar.py`, que recorre de 1180 a 3840 px y comprueba que el índice no pisa
   el texto ni el número de verso. Con el corte anterior, 980 px, se montaba.
 
@@ -112,8 +129,19 @@ sobre lo que el generador cree haber escrito:
   oscuro × `data-th` × radio marcado) resolviendo la cascada de `estilo.css`, y
   comprueba que siempre se ve un icono y solo uno, que es el del tema contrario al
   que hay puesto, y que pulsarlo cambia el tema con y sin JavaScript.
+- **PORTADA**: que `index.html` lleva el mismo botón de tema, los mismos radios y
+  el mismo guardado que las secciones.
 - **ANCHOS**: lee las medidas del índice lateral de la hoja y recorre de 1180 a
   3840 px comprobando que no pisa el texto ni se sale por la izquierda.
+- **NAVEGADOR**: abre las páginas en Chromium con `file://`, que es como se miran
+  en local, a cuatro anchos y con el sistema en oscuro. Comprueba lo que ninguna
+  lectura del HTML puede ver: que los recortes cargan de verdad, que el alto real
+  del bloque de arriba coincide con `--topH` (si no, el encabezado de canción se
+  esconde detrás de la barra), que no aparece scroll horizontal, que se arranca en
+  claro y en grande, y que pulsar la luna pone el tema oscuro e invierte los
+  recortes. Se salta sola si no hay playwright:
+
+      pip install playwright && playwright install chromium
 
 ## Hecho
 
@@ -168,6 +196,15 @@ una se regeneraron las secciones 1 y 2 y su texto no cambió.
 - **Una línea sin texto visible no es una línea.** Un glifo de espacio suelto
   formaba su propia línea, entraba como transliteración y metía una línea en
   blanco en el verso (canción 8, verso 5).
+- **El recorte impreso va como `<img>`, no como máscara CSS.** Chrome no carga las
+  máscaras cuando la página se abre con `file://`, así que la capa de auditoría
+  desaparecía entera al mirar el sitio en local y solo se veía publicada. Como el
+  recorte es tinta negra sobre nada, en tema oscuro se invierte con `--inv`, que
+  se declara junto al resto de colores del tema y no repite la condición.
+- **Nada oculto puede ensanchar la página.** El grupo de radios del tema va con
+  `.oculto`; en su sitio natural, junto al botón, sus hijos desbordaban por la
+  derecha y la página cogía scroll horizontal aunque no se vieran. Va anclado a la
+  izquierda del contenedor pegajoso, que ocupa todo el ancho.
 
 ## Pendiente
 
@@ -178,6 +215,9 @@ una se regeneraron las secciones 1 y 2 y su texto no cambió.
 - Títulos bengalíes de sección, que se solapan con el latino y salen mordidos.
   `extraer_pdf.py` recorta `section_ben` y luego lo tira (`data['seccion']['ben']
   = None`).
+- En Vijñapti y Śrī Nāma-māhātmya no se detecta ningún número de canción impreso.
+  Hay que mirar si esas dos secciones no los llevan o si `kind()` necesita otra
+  regla, antes de extraerlas.
 - Las notas de comentario con marcador de rango, como `(1–4) Esta canción se basa
   en el primer verso del Śrī Upadeśāmṛta`, se cuelgan del primer verso del rango.
   En el libro van detrás del último. Es colocación, no pérdida.

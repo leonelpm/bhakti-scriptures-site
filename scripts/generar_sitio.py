@@ -5,7 +5,7 @@ Las secciones que todavia no se han extraido salen en el indice marcadas como
 pendientes, no desaparecen."""
 import json, os, html, sys
 from secciones import SECCIONES, INDICE_KIRTAN, archivo, vecinas
-from generar_html import CSS, CABEZA, construir, comprobar
+from generar_html import CSS, CABEZA, ARRIBA, bloque_tema, construir, comprobar
 
 DEST = os.environ.get('DEST', 'sitio')
 PORTADA = 'index.html'          # GitHub Pages sirve esta como raiz
@@ -96,6 +96,15 @@ def indice(hechas):
 <link rel="stylesheet" href="estilo.css">
 </head>
 <body class="portada">
+
+<div class="top">
+<header class="bar">
+  <div class="barIn">
+    {bloque_tema()}
+  </div>
+</header>
+</div>
+
 <main>
   <div class="head">
     <p class="over">Bhaktivinod &#7788;h&#257;kur &#183; &#346;r&#299; Laghu-chandrik&#257;-bh&#257;&#7779;ya</p>
@@ -110,6 +119,8 @@ def indice(hechas):
   <p class="sub">Por primer verso. El n&#250;mero es la p&#225;gina del libro impreso.</p>
   <ul class="kir">{''.join(ks)}</ul>
 </main>
+
+{ARRIBA}
 </body>
 </html>
 '''
