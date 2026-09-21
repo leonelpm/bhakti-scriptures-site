@@ -15,12 +15,39 @@ Tres pasadas:
     python3 verificar.py              todas las secciones extraidas
     python3 verificar.py dainyatmika  solo una
 """
-import json, os, re, sys
+import json, os, re, sys, hashlib
 from bs4 import BeautifulSoup
 from secciones import SECCIONES, archivo
 
 DEST = os.environ.get('DEST', 'sitio')
 REM = 16.0          # rem = tamano de raiz; --fs solo toca a body, no a html
+
+
+def version_hoja():
+    """La huella que deberia llevar el enlace a la hoja."""
+    ruta = os.path.join(DEST, 'estilo.css')
+    if not os.path.exists(ruta):
+        return None
+    return hashlib.sha1(open(ruta, 'rb').read()).hexdigest()[:10]
+
+
+def revisa_enlace_hoja(S, quien, fallos):
+    """El enlace a la hoja tiene que llevar detras la huella de su contenido.
+    GitHub Pages la sirve con max-age=600: sin la huella, tras publicar el
+    navegador junta el HTML nuevo con la hoja vieja que tiene guardada y la
+    pagina se ve rota. Le paso a Firefox exactamente eso."""
+    ver = version_hoja()
+    link = S.find('link', rel='stylesheet', href=re.compile(r'estilo\.css'))
+    if link is None:
+        fallos.append(f'{quien}: no enlaza estilo.css')
+        return
+    href = link['href']
+    if '?v=' not in href:
+        fallos.append(f'{quien}: enlaza la hoja sin huella ({href}), '
+                      'una cache rancia la puede romper al publicar')
+    elif ver and href.split('?v=')[1] != ver:
+        fallos.append(f'{quien}: la huella del enlace ({href.split("?v=")[1]}) '
+                      f'no es la de estilo.css ({ver})')
 
 
 def _texto(n):
@@ -138,6 +165,7 @@ def dom(sec, D, fallos):
             fallos.append(f'{sec["slug"]}: {quien} no viene marcado por defecto (#{r})')
     if not S.select_one('a.arriba[href="#"]'):
         fallos.append(f'{sec["slug"]}: falta el botón de subir al principio')
+    revisa_enlace_hoja(S, sec['slug'], fallos)
     if not S.select_one('.top .bar') or not S.select_one('.top details.cfg'):
         fallos.append(f'{sec["slug"]}: la barra y Configuración no van en el mismo bloque pegajoso')
     if S.select_one('details.cfg .cfgIn #th-dia'):
@@ -427,11 +455,12 @@ def portada(fallos):
         fallos.append('index.html: el tema claro no viene marcado por defecto')
     if not S.select_one('a.arriba[href="#"]'):
         fallos.append('index.html: falta el botón de subir al principio')
+    revisa_enlace_hoja(S, 'index.html', fallos)
     js = [s for s in S.head.find_all('script') if s.string and 'localStorage' in s.string]
     if not js:
         fallos.append('index.html: la portada no restaura el tema guardado')
     print(f'  index.html                   botón de tema, tres radios, '
-          f'restaura lo guardado, botón de subir')
+          f'restaura lo guardado, botón de subir, hoja con huella')
     return S
 
 

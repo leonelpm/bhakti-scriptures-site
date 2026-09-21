@@ -100,6 +100,26 @@ o poniendo `CAPA_ORIGINAL = False` en el propio archivo. Apagarla quita los PNG 
 también la casilla «Original impreso» de Configuración. Bhajana-lālasā pasa de
 148 KB a 125 KB.
 
+## Publicar
+
+GitHub Pages sirve `estilo.css` con `Cache-Control: max-age=600`. Sin más, al
+publicar un cambio el navegador puede juntar el HTML nuevo con la hoja vieja que
+tiene guardada, y durante diez minutos la página se ve rota: el título vuelve a
+ser pequeño, la barra deja de acompañar al scroll, el botón de subir cae dentro
+del texto y el índice lateral se descuadra. Pasó de verdad, en Firefox, mientras
+Chrome se veía perfecto, que es la pista de que era caché y no despliegue.
+
+Por eso las páginas enlazan la hoja con la huella de su contenido detrás:
+
+    <link rel="stylesheet" href="estilo.css?v=70f2f1d9dc">
+
+Una hoja distinta es una dirección distinta, así que la caché no puede servir la
+que no toca. La huella la calcula `generar_sitio.py` y `verificar.py` comprueba
+que la del enlace es la del `estilo.css` que hay al lado.
+
+Si aun así una página se ve rara tras publicar, es caché del navegador:
+Ctrl+Shift+R (Cmd+Shift+R en Mac) la fuerza a recargarlo todo.
+
 ## Comprobaciones
 
 Ninguna página se publica sin pasar las tres.
@@ -131,6 +151,8 @@ sobre lo que el generador cree haber escrito:
   que hay puesto, y que pulsarlo cambia el tema con y sin JavaScript.
 - **PORTADA**: que `index.html` lleva el mismo botón de tema, los mismos radios y
   el mismo guardado que las secciones.
+- **La huella de la hoja**: que cada página enlaza `estilo.css?v=…` con la huella
+  del `estilo.css` que se publica al lado, no con otra vieja ni sin huella.
 - **ANCHOS**: lee las medidas del índice lateral de la hoja y recorre de 1180 a
   3840 px comprobando que no pisa el texto ni se sale por la izquierda.
 - **NAVEGADOR**: abre las páginas en Chromium con `file://`, que es como se miran
@@ -201,6 +223,9 @@ una se regeneraron las secciones 1 y 2 y su texto no cambió.
   desaparecía entera al mirar el sitio en local y solo se veía publicada. Como el
   recorte es tinta negra sobre nada, en tema oscuro se invierte con `--inv`, que
   se declara junto al resto de colores del tema y no repite la condición.
+- **La hoja se enlaza con la huella de su contenido.** Sin ella, tras publicar el
+  navegador junta el HTML nuevo con la hoja vieja de su caché y la página se ve
+  rota diez minutos. Una hoja distinta tiene que ser una dirección distinta.
 - **Nada oculto puede ensanchar la página.** El grupo de radios del tema va con
   `.oculto`; en su sitio natural, junto al botón, sus hijos desbordaban por la
   derecha y la página cogía scroll horizontal aunque no se vieran. Va anclado a la

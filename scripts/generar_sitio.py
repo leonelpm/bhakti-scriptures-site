@@ -3,7 +3,7 @@
 y un indice que enlaza las secciones y el indice de kirtan por primer verso.
 Las secciones que todavia no se han extraido salen en el indice marcadas como
 pendientes, no desaparecen."""
-import json, os, html, sys
+import json, os, html, sys, hashlib
 from secciones import SECCIONES, INDICE_KIRTAN, archivo, vecinas
 from generar_html import CSS, CABEZA, ARRIBA, bloque_tema, construir, comprobar
 
@@ -16,6 +16,15 @@ PORTADA = 'index.html'          # GitHub Pages sirve esta como raiz
 # y regenerar para que desaparezca de todo el sitio y las paginas adelgacen.
 CAPA_ORIGINAL = os.environ.get('CAPA_ORIGINAL', '1') != '0'
 
+# La hoja se enlaza con la huella de su contenido detras. GitHub Pages sirve
+# estilo.css con Cache-Control: max-age=600, asi que tras publicar el navegador
+# puede juntar el HTML nuevo con la hoja vieja que tiene guardada y la pagina se
+# ve rota durante diez minutos. Con la huella en la direccion, una hoja distinta
+# es una direccion distinta y eso no puede pasar.
+def version(txt):
+    return hashlib.sha1(txt.encode('utf-8')).hexdigest()[:10]
+
+
 esc = lambda s: html.escape(s, quote=False)
 escribir = lambda ruta, txt: open(ruta, 'w', encoding='utf-8', newline='\n').write(txt)
 
@@ -25,14 +34,14 @@ def cargar(sec):
     return json.load(open(ruta, encoding='utf-8')) if os.path.exists(ruta) else None
 
 
-def pagina_seccion(sec, D):
+def pagina_seccion(sec, D, hoja='estilo.css'):
     ant, sig = vecinas(sec)
     nav = {'indice': PORTADA}
     if ant and cargar(ant):
         nav['ant'] = (archivo(ant), esc(ant['rom']))
     if sig and cargar(sig):
         nav['sig'] = (archivo(sig), esc(sig['rom']))
-    doc = construir(D, con_buscador=False, con_original=CAPA_ORIGINAL, css='estilo.css', nav=nav)
+    doc = construir(D, con_buscador=False, con_original=CAPA_ORIGINAL, css=hoja, nav=nav)
     print(' ', archivo(sec))
     ok = comprobar(doc, D)
     escribir(os.path.join(DEST, archivo(sec)), doc)
@@ -55,7 +64,7 @@ def ancla_kirtan(fila, hechas):
     return None, None
 
 
-def indice(hechas):
+def indice(hechas, hoja='estilo.css'):
     kir = os.path.join(DEST, 'json', 'kirtan.json')
     filas = json.load(open(kir, encoding='utf-8')) if os.path.exists(kir) else []
     hechos = {s['slug'] for s, _ in hechas}
@@ -93,7 +102,7 @@ def indice(hechas):
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,500;0,600;1,400&amp;family=Archivo:wght@400;500;600&amp;family=Noto+Serif+Bengali:wght@400;500&amp;display=swap" rel="stylesheet">
-<link rel="stylesheet" href="estilo.css">
+<link rel="stylesheet" href="{hoja}">
 </head>
 <body class="portada">
 
@@ -164,6 +173,7 @@ body.portada main{max-width:44rem;padding-bottom:5rem}
 def main():
     os.makedirs(DEST, exist_ok=True)
     escribir(os.path.join(DEST, 'estilo.css'), CSS + EXTRA)
+    hoja = 'estilo.css?v=' + version(CSS + EXTRA)
     pedidas = sys.argv[1:]
     hechas, todo_ok = [], True
     for s in SECCIONES:
@@ -176,9 +186,9 @@ def main():
             continue
         hechas.append((s, D))
     for s, D in hechas:
-        todo_ok &= pagina_seccion(s, D)
-    indice(hechas)
-    print('  estilo.css', round(os.path.getsize(os.path.join(DEST, 'estilo.css')) / 1024, 1), 'KB')
+        todo_ok &= pagina_seccion(s, D, hoja)
+    indice(hechas, hoja)
+    print('  ' + hoja, round(os.path.getsize(os.path.join(DEST, 'estilo.css')) / 1024, 1), 'KB')
     print('  capa de recortes del bengali impreso:', 'ENCENDIDA' if CAPA_ORIGINAL else 'apagada')
     print('SITIO', 'listo' if todo_ok else 'CON FALLOS')
 
