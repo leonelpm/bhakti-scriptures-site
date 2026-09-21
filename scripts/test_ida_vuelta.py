@@ -3,6 +3,12 @@
 Si alguna línea no coincide tras normalizar, la regla está mal.
 Sin argumentos recorre todas las secciones extraídas; con argumentos, solo esas."""
 import json, os, sys
+
+# La consola de Windows viene en cp1252 y estos scripts imprimen nombres
+# como 'Maṅgalācharaṇa' o 'kīrtan': sin esto, generar_sitio.py se cae con
+# UnicodeEncodeError despues de haber escrito ya las paginas.
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 from secciones import SECCIONES
 from iast2ben import linea_bengali, bengali_a_iast, normaliza
 

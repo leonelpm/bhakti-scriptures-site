@@ -4,6 +4,12 @@ y un indice que enlaza las secciones y el indice de kirtan por primer verso.
 Las secciones que todavia no se han extraido salen en el indice marcadas como
 pendientes, no desaparecen."""
 import json, os, html, sys, hashlib
+
+# La consola de Windows viene en cp1252 y estos scripts imprimen nombres
+# como 'Maṅgalācharaṇa' o 'kīrtan': sin esto, generar_sitio.py se cae con
+# UnicodeEncodeError despues de haber escrito ya las paginas.
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 from secciones import SECCIONES, INDICE_KIRTAN, archivo, vecinas
 from generar_html import CSS, CABEZA, ARRIBA, bloque_tema, construir, comprobar
 

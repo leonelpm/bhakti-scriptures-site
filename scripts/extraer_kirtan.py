@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """Indice de kīrtan por primer verso, de las dos ultimas paginas del PDF."""
-import pdfplumber, re, json, os
+import pdfplumber, re, json, os, sys
+
+# La consola de Windows viene en cp1252 y estos scripts imprimen nombres
+# como 'Maṅgalācharaṇa' o 'kīrtan': sin esto, generar_sitio.py se cae con
+# UnicodeEncodeError despues de haber escrito ya las paginas.
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 from secciones import INDICE_KIRTAN
 
 PDF = os.environ.get('SARANAGATI_PDF', 'SARANAGATI.pdf')

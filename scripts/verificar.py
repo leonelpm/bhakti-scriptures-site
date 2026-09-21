@@ -16,6 +16,12 @@ Tres pasadas:
     python3 verificar.py dainyatmika  solo una
 """
 import json, os, re, sys, hashlib
+
+# La consola de Windows viene en cp1252 y estos scripts imprimen nombres
+# como 'Maṅgalācharaṇa' o 'kīrtan': sin esto, generar_sitio.py se cae con
+# UnicodeEncodeError despues de haber escrito ya las paginas.
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 from bs4 import BeautifulSoup
 from secciones import SECCIONES, archivo
 

@@ -65,13 +65,20 @@ lleva el tema son los radios y el script solo los recuerda.
 
 ## Regenerar
 
-Hace falta `python3` con `pdfplumber`, `Pillow`, `beautifulsoup4` y `tinycss2`, y
-un rasterizador: `pdftoppm` (poppler) o, si no está, `pypdfium2`, que llega por
-pip. **Los recortes publicados están hechos con poppler**; pypdfium2 da el mismo
-texto pero recortes ±1 px distintos, y en algún caso se come un descendente. Si
-vas a regenerar `recortes/`, instala poppler:
+Todo lo que hace falta, de una vez:
 
-    conda install -c conda-forge poppler
+    pip install pdfplumber pillow beautifulsoup4 tinycss2 pypdfium2
+    conda install -c conda-forge poppler                 # rasteriza los recortes
+    pip install playwright && playwright install chromium firefox   # opcional
+
+El rasterizador puede ser `pdftoppm` (poppler) o, si no está, `pypdfium2`, que
+llega por pip. **Los recortes publicados están hechos con poppler**; pypdfium2 da
+el mismo texto pero recortes ±1 px distintos, y en algún caso se come un
+descendente. Si vas a regenerar `recortes/`, usa poppler.
+
+En Windows los scripts se lanzan con `python`, no con `python3`, y `DEST` se pone
+delante en bash (`DEST=. python …`) o con `$env:DEST="."` en PowerShell. No hace
+falta tocar la codificación de la consola: los scripts ponen la suya.
 
 Con el PDF en la raíz (`SARANAGATI.pdf`, ignorado por git) y `DEST` apuntando a
 la carpeta publicable:
@@ -230,6 +237,20 @@ una se regeneraron las secciones 1 y 2 y su texto no cambió.
   `.oculto`; en su sitio natural, junto al botón, sus hijos desbordaban por la
   derecha y la página cogía scroll horizontal aunque no se vieran. Va anclado a la
   izquierda del contenedor pegajoso, que ocupa todo el ancho.
+
+## Por dónde seguir
+
+El orden de trabajo de cada sección nueva, que es también lo que hay que pasar
+antes de publicar nada:
+
+    DEST=. python scripts/extraer_pdf.py <slug>    # mira si salen HUECOS
+    DEST=. python scripts/generar_sitio.py
+    DEST=. python scripts/test_ida_vuelta.py
+    DEST=. python scripts/verificar.py
+
+Las reglas de abajo son el contrato: cualquier arreglo tiene que valer para todo
+el libro, y después de cambiar una regla hay que regenerar las secciones ya hechas
+y comprobar que su texto no cambia. `git diff --stat json/` lo dice en un vistazo.
 
 ## Pendiente
 

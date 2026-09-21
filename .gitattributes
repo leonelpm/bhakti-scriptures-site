@@ -1,0 +1,10 @@
+# El generador escribe siempre con saltos \n para que la salida sea la misma en
+# Windows y en Linux. Sin esto, con core.autocrlf=true git deja CRLF en la copia
+# de trabajo y deja de ser cierto que los scripts reproducen lo publicado.
+*.html  text eol=lf
+*.css   text eol=lf
+*.json  text eol=lf
+*.py    text eol=lf
+*.md    text eol=lf
+*.png   binary
+*.pdf   binary

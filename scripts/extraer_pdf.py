@@ -1,4 +1,10 @@
-import pdfplumber, re, json, os, shutil, subprocess, unicodedata
+import pdfplumber, re, json, os, shutil, subprocess, unicodedata, sys
+
+# La consola de Windows viene en cp1252 y estos scripts imprimen nombres
+# como 'Maṅgalācharaṇa' o 'kīrtan': sin esto, generar_sitio.py se cae con
+# UnicodeEncodeError despues de haber escrito ya las paginas.
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 PDF = os.environ.get('SARANAGATI_PDF', 'SARANAGATI.pdf')
 pdf = pdfplumber.open(PDF)
 DIG={'!':'1','@':'2','#':'3','$':'4','%':'5','^':'6','&':'7','*':'8','(':'9',')':'0'}
